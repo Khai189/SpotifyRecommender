@@ -7,6 +7,7 @@ Using this info, an NLP model will analyze your tastes as compared to a datsaset
 
 ## 📚 Techstack
 > *It's important to note that you don't need to know how to code to use this bot effectively*
+
 Languages used are Python and PostgreSQL. 
 For data collection, we store all the data remotely using a PostgreSQL server hosted on AWS. 
 Libraries are included in the requirements.txt
