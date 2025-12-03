@@ -6,4 +6,7 @@ os
 json
 torchvision
 torchaudio
-spotifyscraper
+spotipy
+sqlalchemy
+seaborn
+spotipy
