@@ -40,9 +40,24 @@ input_tensor = waveform.unsqueeze(0)
 with torch.inference_mode():
     logits, _ = initial_model(waveform)
 labels = bundle.get_labels()
+BLANK_ID = len(labels) - 1
+
 print(f"Logits shape: {logits.shape}")
 print(f"Max logit value: {logits.max().item()}")
 print(f"Min logit value: {logits.min().item()}")
+
+# Debugging transcription
+emission = logits.squeeze(0)
+indices = torch.argmax(emission, dim=-1)
+unique_indices = torch.unique_consecutive(indices, dim=-1)
+result_indices = [i.item() for i in unique_indices if i != BLANK_ID]
+transcript_list = [labels[i] for i in result_indices]
+final_text = "".join(transcript_list).replace('|', ' ').strip()
+print(f"Raw indices generated: {len(indices)} frames")
+print(f"Non-blank/unique characters: {len(result_indices)} characters")
+
+print(f"Transcription: '{final_text}'")
+
 
 # Example greedy decoder taken from PyTorch
 class GreedyCTCDecoder(torch.nn.Module):
