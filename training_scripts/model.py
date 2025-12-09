@@ -27,19 +27,26 @@ waveform, sample_rate = torchaudio.load('test.mp3')
 bundle = torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H
 initial_model = bundle.get_model()
 
+print(f"Waveform shape after load: {waveform.shape}")
+print(f"Waveform max value: {waveform.max().item()}")
+print(f"Waveform min value: {waveform.min().item()}")
+
 initial_model.eval()
 
+if waveform.shape[0] > 1:
+    waveform = torch.mean(waveform, dim=0, keepdim=True)
+    print(f"Mono shape: {waveform.shape}")
 expected_sample_rate = bundle.sample_rate
 if sample_rate != expected_sample_rate:
     resampler = torchaudio.transforms.Resample(sample_rate, expected_sample_rate)
     waveform = resampler(waveform)
 
-waveform = waveform.mean(dim=0, keepdim=True) if waveform.shape[0] > 1 else waveform
-input_tensor = waveform.unsqueeze(0)
-
+input_tensor = waveform.squeeze(0)
+input_tensor = input_tensor.unsqueeze(0)
 with torch.inference_mode():
-    logits, _ = initial_model(waveform)
+    logits, _ = initial_model(input_tensor)
 labels = bundle.get_labels()
+print(f"Labels: {labels}")
 BLANK_ID = len(labels) - 1
 
 print(f"Logits shape: {logits.shape}")
@@ -74,7 +81,7 @@ class GreedyCTCDecoder(torch.nn.Module):
         return "".join([self.labels[i] for i in indices])
 
 
-decoder = GreedyCTCDecoder(labels=bundle.get_labels(), blank='-')
+decoder = GreedyCTCDecoder(labels=bundle.get_labels(), blank='|-')
 
 transcript = decoder(logits[0])
 
