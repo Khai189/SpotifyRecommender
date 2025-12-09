@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchaudio import datasets
 import torchaudio.transforms as transforms
 import openunmix
+import os
 import torch
 import torchaudio
 
@@ -12,18 +13,12 @@ import torchaudio
 # Replace 'my_song.wav' with your file path
 audio, rate = torchaudio.load('test.mp3')
 
-# Resample and normalize if necessary (UMX expects 44.1 kHz, stereo)
 if rate != 44100:
     audio = torchaudio.transforms.Resample(rate, 44100)(audio)
 
-# 2. Separate the tracks
-# This will return a tensor of shape (n_stems, n_channels, n_samples)
-estimates = openunmix.model.separate(
-    torch.as_tensor(audio).float().unsqueeze(0), # Add batch dimension
-    rate=44100
-)[0]
+audio_tensor = audio.float().unsqueeze(0)
 
-# 3. Save the results
+
 stems = ['vocals', 'drums', 'bass', 'other']
 output_path = 'umx_output'
 os.makedirs(output_path, exist_ok=True)
