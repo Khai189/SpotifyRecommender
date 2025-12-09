@@ -4,6 +4,34 @@ import torchaudio
 from torch.utils.data import Dataset, DataLoader
 from torchaudio import datasets
 import torchaudio.transforms as transforms
+import openunmix
+import torch
+import torchaudio
+
+# 1. Load the audio file
+# Replace 'my_song.wav' with your file path
+audio, rate = torchaudio.load('test.mp3')
+
+# Resample and normalize if necessary (UMX expects 44.1 kHz, stereo)
+if rate != 44100:
+    audio = torchaudio.transforms.Resample(rate, 44100)(audio)
+
+# 2. Separate the tracks
+# This will return a tensor of shape (n_stems, n_channels, n_samples)
+estimates = openunmix.model.separate(
+    torch.as_tensor(audio).float().unsqueeze(0), # Add batch dimension
+    rate=44100
+)[0]
+
+# 3. Save the results
+stems = ['vocals', 'drums', 'bass', 'other']
+output_path = 'umx_output'
+os.makedirs(output_path, exist_ok=True)
+
+for stem, estimate in zip(stems, estimates):
+    output_file = os.path.join(output_path, f'umx_{stem}.wav')
+    torchaudio.save(output_file, estimate.cpu(), 44100)
+
 if torch.cuda.is_available():
     device = "cuda"
     print("Cuda device is available")
@@ -62,17 +90,15 @@ transcript_list = [labels[i] for i in result_indices]
 final_text = "".join(transcript_list).replace('|', ' ').strip()
 print(f"Raw indices generated: {len(indices)} frames")
 print(f"Non-blank/unique characters: {len(result_indices)} characters")
-
 print(f"Transcription: '{final_text}'")
 
 
 # Example greedy decoder taken from PyTorch
 class GreedyCTCDecoder(torch.nn.Module):
-    def __init__(self, labels, blank="|-"):  # Use a non-standard blank to avoid confusion in output
+    def __init__(self, labels, blank_index):  # Use a non-standard blank to avoid confusion in output
         super().__init__()
         self.labels = labels
-        self.blank = blank
-        self.blank_id = labels.index(blank) if blank in labels else len(labels)
+        self.blank_id = blank_index
 
     def forward(self, emission: torch.Tensor) -> str:
         indices = torch.argmax(emission, dim=-1)
@@ -81,9 +107,12 @@ class GreedyCTCDecoder(torch.nn.Module):
         return "".join([self.labels[i] for i in indices])
 
 
-decoder = GreedyCTCDecoder(labels=bundle.get_labels(), blank='|-')
+decoder = GreedyCTCDecoder(labels=bundle.get_labels(), blank_index=BLANK_ID)
 
 transcript = decoder(logits[0])
 
 final_text = transcript.replace('|', ' ').strip()
 print(f"Transcription: {final_text}")
+
+# So far, our encoder cannot find any elements due to the harshness of metal music.
+
