@@ -5,27 +5,10 @@ from torch.utils.data import Dataset, DataLoader
 from torchaudio import datasets
 import torchaudio.transforms as transforms
 import openunmix
+import glob
 import os
 import torch
 import torchaudio
-
-# 1. Load the audio file
-# Replace 'my_song.wav' with your file path
-audio, rate = torchaudio.load('test.mp3')
-
-if rate != 44100:
-    audio = torchaudio.transforms.Resample(rate, 44100)(audio)
-
-audio_tensor = audio.float().unsqueeze(0)
-
-
-stems = ['vocals', 'drums', 'bass', 'other']
-output_path = 'umx_output'
-os.makedirs(output_path, exist_ok=True)
-
-for stem, estimate in zip(stems, estimates):
-    output_file = os.path.join(output_path, f'umx_{stem}.wav')
-    torchaudio.save(output_file, estimate.cpu(), 44100)
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -43,10 +26,35 @@ else:
     device = "mps"
     print("Mac device available")
 
+
+audio, rate = torchaudio.load('test.mp3')
+
+if rate != 44100:
+    audio = torchaudio.transforms.Resample(rate, 44100)(audio)
+
+audio_tensor = audio.float().unsqueeze(0)
+separator = torch.hub.load('sigsep/open-unmix-pytorch', 'umxhq', device="cpu")
+
+with torch.inference_mode():
+    estimates = separator(audio_tensor)[0]
+
+
+stems = ['vocals', 'drums', 'bass', 'other']
+output_path = 'umx_output'
+os.makedirs(output_path, exist_ok=True)
+
+for i, stem in enumerate(stems):
+    output_file = os.path.join(output_path, f'umx_{stem}.wav')
+    torchaudio.save(output_file, estimates[i].cpu(), 44100)
+
+
+
 torch.manual_seed(42)
 
 # Experimentation, we start with an initial torchaudio model and build from there
-waveform, sample_rate = torchaudio.load('test.mp3')
+
+test_vocal_path = os.path.join(output_path, "umx_vocals.wav")
+waveform, sample_rate = torchaudio.load(test_vocal_path)
 bundle = torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H
 initial_model = bundle.get_model()
 
@@ -102,7 +110,7 @@ class GreedyCTCDecoder(torch.nn.Module):
         return "".join([self.labels[i] for i in indices])
 
 
-decoder = GreedyCTCDecoder(labels=bundle.get_labels(), blank_index=BLANK_ID)
+decoder = GreedyCTCDecoder(labels=bundle.get_labels(), blank_index=0)
 
 transcript = decoder(logits[0])
 
