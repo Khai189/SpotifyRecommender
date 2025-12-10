@@ -9,6 +9,10 @@ import glob
 import os
 import torch
 import torchaudio
+from faster_whisper import WhisperModel
+
+
+
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -51,9 +55,26 @@ for i, stem in enumerate(stems):
 
 torch.manual_seed(42)
 
-# Experimentation, we start with an initial torchaudio model and build from there
+# Experimentation, we start with an initial torchaudio model and build from there.
+# We'll use faster whisper, which is an implementation of ChatGPT's whisper, and hopefully build
+# our own custom model if performance sees fit
 
 test_vocal_path = os.path.join(output_path, "umx_vocals.wav")
+
+print("Starting model download...")
+model_size = "large-v3"
+
+model = WhisperModel(model_size,
+                     device="cpu",
+                     compute_type="int8"
+                     )
+
+segments, info = model.transcribe("test.mp3", beam_size=5)
+
+print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+for segment in segments:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+
 waveform, sample_rate = torchaudio.load(test_vocal_path)
 bundle = torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H
 initial_model = bundle.get_model()
