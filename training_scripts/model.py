@@ -30,8 +30,8 @@ else:
     device = "mps"
     print("Mac device available")
 
-
-audio, rate = torchaudio.load('test.mp3')
+current_mp3 = 'test.mp3'
+audio, rate = torchaudio.load(current_mp3)
 
 if rate != 44100:
     audio = torchaudio.transforms.Resample(rate, 44100)(audio)
@@ -44,7 +44,7 @@ with torch.inference_mode():
 
 
 stems = ['vocals', 'drums', 'bass', 'other']
-output_path = 'umx_output'
+output_path = f'{current_mp3}_umx_output'
 os.makedirs(output_path, exist_ok=True)
 
 for i, stem in enumerate(stems):
@@ -61,7 +61,6 @@ torch.manual_seed(42)
 
 test_vocal_path = os.path.join(output_path, "umx_vocals.wav")
 
-print("Starting model download...")
 model_size = "large-v3"
 
 model = WhisperModel(model_size,
@@ -69,7 +68,7 @@ model = WhisperModel(model_size,
                      compute_type="int8"
                      )
 
-segments, info = model.transcribe("test.mp3", beam_size=5)
+segments, info = model.transcribe(test_vocal_path, beam_size=5)
 
 print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 for segment in segments:
@@ -137,6 +136,33 @@ transcript = decoder(logits[0])
 
 final_text = transcript.replace('|', ' ').strip()
 print(f"Transcription: {final_text}")
+
+"""
+Results:
+Faster-Whisper:
+[0.00s -> 4.18s]  You guys are killing my life!
+[4.18s -> 10.50s]  You're the thing that slowly stops me, yeah!
+[10.50s -> 17.00s]  I was made of all the things I have today!
+[17.00s -> 24.00s]  Seasons never end, the worst is waking up!
+[24.00s -> 28.00s]  Making someone, I'm not gonna make it!
+
+WAV2VEC2_ASR_BASE_960H
+THEY YOS A SHELL  A TNG TE SOLLY STOPSTY TOS MA INVALVETHE SINGS A AS AN ST IS A NO AWLSE TE TIN LAKE IN S MAN SAN AM NOT Y O LY GDS HE
+
+Actual Lyrics:
+I push my fingers into my eyes
+It's the only thing that slowly stops the ache
+But it's made of all the things I have to take
+Jesus, it never ends, it works it's way inside
+If the pain goes on, I'm not gonna make it
+
+Results Discussion:
+
+Current results show that, even when separating vocals from other sounds,
+the current models have a poor detection and therefore we might want to focus 
+more on similarities between sounds, such as beats, drums, etc. rather than lyrics 
+as finding similarity across lyrics may prove to be difficult. 
+"""
 
 # So far, our encoder cannot find any elements due to the harshness of metal music.
 
