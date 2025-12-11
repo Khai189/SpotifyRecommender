@@ -6,23 +6,24 @@ import json
 API_KEY = api_key_last_fm
 USER_AGENT = os.environ.get('USER_AGENT')
 
-def connect_last_fm(user_agent, api_key):
+def connect_last_fm(payload):
     headers = {
-        'user-agent': user_agent
+        'user-agent': USER_AGENT
     }
-
-    payload = {
-        'api_key': api_key,
-        'method': 'chart.getTopTracks',
-        'format': 'json'
-    }
+    payload['api_key'] = API_KEY
+    payload ['format'] = 'json'
     r = requests.get('https://ws.audioscrobbler.com/2.0/', headers=headers, params=payload)
     return r
 
-results_last_fm = connect_last_fm(USER_AGENT, API_KEY)
+results_last_fm = connect_last_fm({
+    'method': 'chart.gettopartists'
+})
+
 
 def jprint(obj):
     print(json.dumps(obj, sort_keys=True, indent=4))
+
+
 
 def lastfm_get(user_agent, api_key, payload):
     headers = {'user-agent': user_agent}
@@ -50,17 +51,12 @@ def get_top_50_track_artists(results):
 
 print(get_top_50_track_artists(r))
 
-def get_artist_info(user_agent, api_key, artist):
-    headers = {
-        'user-agent': user_agent
-    }
-    url = 'https://ws.audioscrobbler.com/2.0/'
-    payload = {
-        'api_key': api_key,
-        'method': 'artists.getInfo',
-        'format': 'json'
-    }
-    response = requests.get(url, headers=headers, params=payload)
+def get_artist_info(artist):
+    response = connect_last_fm({
+        'method': 'artist.getTopTags',
+        'artist': artist,
+    })
     return response
 
-print(get_artist_info(USER_AGENT, API_KEY, "sombr"))
+artist_info = get_artist_info("sombr")
+jprint(artist_info.json())
