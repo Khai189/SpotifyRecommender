@@ -1,4 +1,6 @@
 import requests
+from matplotlib import artist
+
 from scraper_auth import *
 import json
 API_KEY = api_key_last_fm
@@ -47,3 +49,18 @@ def get_top_50_track_artists(results):
     return artists
 
 print(get_top_50_track_artists(r))
+
+def get_artist_info(user_agent, api_key, artist):
+    headers = {
+        'user-agent': user_agent
+    }
+    url = 'https://ws.audioscrobbler.com/2.0/'
+    payload = {
+        'api_key': api_key,
+        'method': 'artists.getInfo',
+        'format': 'json'
+    }
+    response = requests.get(url, headers=headers, params=payload)
+    return response
+
+print(get_artist_info(USER_AGENT, API_KEY, "sombr"))
