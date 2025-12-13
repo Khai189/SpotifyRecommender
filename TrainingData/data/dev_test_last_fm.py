@@ -1,8 +1,8 @@
 import requests
-from matplotlib import artist
-
 from scraper_auth import *
 import json
+import sqlalchemy as db
+from sqlalchemy import create_engine
 API_KEY = api_key_last_fm
 USER_AGENT = os.environ.get('USER_AGENT')
 
@@ -60,3 +60,4 @@ def get_artist_info(artist):
 
 artist_info = get_artist_info("HUNTR/X")
 jprint(artist_info.json())
+
