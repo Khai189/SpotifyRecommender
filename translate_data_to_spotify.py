@@ -18,6 +18,7 @@ from scipy.signal import stft
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 
+# Utility
 
 def slugify(s: str) -> str:
     s = s.strip().lower()
@@ -53,10 +54,19 @@ def spotify_get(url: str, token: str, *, params: dict[str, Any] | None = None, t
     r.raise_for_status()
     return r.json()
 
+# Spotify API
 
-def search_track(token: str, artist: str, track: str) -> dict[str, Any] | None:
+def get_track(token: str, track_id: str, *, market: str = "US") -> dict[str, Any]:
+    return spotify_get(f"{SPOTIFY_API_BASE}/tracks/{track_id}", token, params={"market": market})
+
+
+def search_track(token: str, artist: str, track: str, *, market: str = "US") -> dict[str, Any] | None:
     q = f'track:"{track}" artist:"{artist}"'
-    data = spotify_get(f"{SPOTIFY_API_BASE}/search", token, params={"q": q, "type": "track", "limit": 1})
+    data = spotify_get(
+        f"{SPOTIFY_API_BASE}/search",
+        token,
+        params={"q": q, "type": "track", "limit": 1, "market": market},
+    )
     items = (((data.get("tracks") or {}).get("items")) or [])
     return items[0] if items else None
 
@@ -70,6 +80,29 @@ def download_preview(preview_url: str, out_path: Path, timeout: float = 60.0) ->
             if chunk:
                 f.write(chunk)
 
+def download_audio_from_youtube(artist: str, track: str, out_path: Path) -> None:
+    """
+    Searches YouTube and downloads the audio for a track if a suitable match is found.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    search_query = f"ytsearch1:{artist} - {track} audio"
+    command = [
+        "yt-dlp",
+        "-f", "bestaudio",
+        "--extract-audio",
+        "--audio-format", "m4a",
+        "--audio-quality", "0",
+        "--output", str(out_path),
+        # The search query
+        search_query,
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed for '{artist} - {track}': {result.stderr[:500]}")
+
+
+
 
 def _ensure_ffmpeg() -> str:
     ffmpeg = shutil.which("ffmpeg")
@@ -81,24 +114,22 @@ def _ensure_ffmpeg() -> str:
     return ffmpeg
 
 
-def mp3_to_wav_ffmpeg(mp3_path: Path, wav_path: Path, *, target_sr: int = 22050) -> None:
+
+def audio_to_wav_ffmpeg(audio_path: Path, wav_path: Path, *, target_sr: int = 22050) -> None:
     ffmpeg = _ensure_ffmpeg()
     wav_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         ffmpeg,
         "-y",
         "-i",
-        str(mp3_path),
-        "-ac",
-        "1",
-        "-ar",
-        str(target_sr),
-        "-vn",
-        str(wav_path),
+        str(audio_path),
+        "-ac", "1",
+        "-ar", str(target_sr),
+        "-vn", str(wav_path),
     ]
     p = subprocess.run(cmd, capture_output=True, text=True)
     if p.returncode != 0:
-        raise RuntimeError(f"ffmpeg failed decoding {mp3_path.name}:\n{p.stderr[:800]}")
+        raise RuntimeError(f"ffmpeg failed decoding {audio_path.name}:\n{p.stderr[:800]}")
 
 
 def _hz_to_mel(hz: np.ndarray) -> np.ndarray:
@@ -194,12 +225,12 @@ def wav_to_log_mel_npz(
 def translate_lastfm_to_spotify(
     in_csv: Path,
     out_csv: Path,
-    mp3_dir: Path,
+    audio_dir: Path,
     *,
     features_dir: Path,
     max_rows: int | None = None,
     sleep_sec: float = 0.10,
-    keep_mp3: bool = False,
+    keep_audio: bool = False,
 ) -> None:
     client_id = SPOTIFY_CLIENT_ID
     client_secret = SPOTIFY_CLIENT_SECRET
@@ -271,12 +302,17 @@ def translate_lastfm_to_spotify(
             result["matched_artist_name"] = (artists[0].get("name") if artists else "") or ""
             result["popularity"] = str(item.get("popularity") or "")
 
-            preview_url = result["preview_url"]
             track_id = result["spotify_track_id"]
+            track_duration_ms = item.get("duration_ms")  # Get the full track duration
 
-            if preview_url and track_id:
-                mp3_name = f"{slugify(result['matched_artist_name'] or artist)}__{slugify(result['matched_track_name'] or track)}__{track_id}.mp3"
-                mp3_path = mp3_dir / mp3_name
+
+            if track_id and track_duration_ms:
+                # Define paths using a more robust slug
+                safe_artist = slugify(result['matched_artist_name'] or artist)
+                safe_track = slugify(result['matched_track_name'] or track)
+                mp3_name = f"{safe_artist}__{safe_track}__{track_id}.m4a"
+
+                audio_path = audio_dir / mp3_name
                 feature_path = features_dir / f"{track_id}.npz"
                 result["feature_path"] = str(feature_path)
 
@@ -289,14 +325,17 @@ def translate_lastfm_to_spotify(
                         time.sleep(sleep_sec)
                         continue
 
-                    # Download MP3 preview if missing
-                    if not (mp3_path.exists() and mp3_path.stat().st_size > 0):
-                        download_preview(preview_url, mp3_path)
-                    result["downloaded_preview_path"] = str(mp3_path)
+                    if not (audio_path.exists() and audio_path.stat().st_size > 0):
+                        download_audio_from_youtube(
+                            artist=result["matched_artist_name"] or artist,
+                            track=result["matched_track_name"] or track,
+                            out_path=audio_path,
+                        )
+                    result["downloaded_preview_path"] = str(audio_path)  # Field name is the same
 
-                    # Decode and extract mel
+                    # Decode and extract mel (this part remains the same)
                     tmp_wav = feature_path.with_suffix(".tmp.wav")
-                    mp3_to_wav_ffmpeg(mp3_path, tmp_wav, target_sr=22050)
+                    audio_to_wav_ffmpeg(audio_path, tmp_wav, target_sr=22050)
                     wav_to_log_mel_npz(tmp_wav, feature_path)
 
                     # Cleanup temp WAV
@@ -306,24 +345,29 @@ def translate_lastfm_to_spotify(
                         pass
 
                     # Delete MP3 unless you want to keep it
-                    if not keep_mp3:
+                    if not keep_audio:
                         try:
-                            mp3_path.unlink(missing_ok=True)
+                            audio_path.unlink(missing_ok=True)
                         except Exception:
                             pass
 
                     result["feature_status"] = "features_created"
                     result["match_status"] = "matched_features_ready"
 
-                except requests.RequestException:
-                    result["feature_status"] = "preview_download_failed"
-                    result["match_status"] = "matched_preview_download_failed"
-                except Exception:
-                    result["feature_status"] = "feature_extraction_failed"
-                    result["match_status"] = "matched_feature_extraction_failed"
+                except Exception as e:
+                    # Catch errors from YouTube download or feature extraction
+                    print(f"Failed processing for {artist} - {track}: {e}")
+                    result["feature_status"] = "processing_failed"
+                    result["match_status"] = "matched_processing_failed"
             else:
-                result["feature_status"] = "no_preview"
-                result["match_status"] = "matched_no_preview"
+                # This now catches tracks that have no duration info
+                result["feature_status"] = "no_duration_data"
+                result["match_status"] = "matched_no_duration_data"
+
+            # --- REPLACEMENT LOGIC ENDS HERE ---
+
+            w.writerow(result)
+            time.sleep(sleep_sec)
 
             w.writerow(result)
             time.sleep(sleep_sec)
@@ -335,16 +379,16 @@ if __name__ == "__main__":
 
     resolved_dir = base / "spotify_resolved" / "pop"
     out_csv = resolved_dir / "resolved.csv"
-    mp3_dir = resolved_dir / "previews"
+    audio_dir = resolved_dir / "previews"
     features_dir = resolved_dir / "features"
 
     translate_lastfm_to_spotify(
         in_csv,
         out_csv,
-        mp3_dir,
+        audio_dir,
         features_dir=features_dir,
         max_rows=100,
-        keep_mp3=False,
+        keep_audio=False,
         sleep_sec=0.10,
     )
     print(f"Wrote: {out_csv}")
