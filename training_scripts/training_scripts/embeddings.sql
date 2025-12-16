@@ -12,5 +12,5 @@ CREATE TABLE IF NOT EXISTS track_embeddings (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS track_embeddings_song_hnsw
-  ON track_embeddings USING hnsw (song_vec vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS track_embeddings_mix_hnsw
+  ON track_embeddings USING hnsw (mix_vec vector_cosine_ops);
