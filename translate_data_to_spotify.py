@@ -2,11 +2,17 @@ import csv
 import os
 import re
 import time
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
+
 from TrainingData.data.scraper_auth import *
 
+import numpy as np
 import requests
+from scipy.io import wavfile
+from scipy.signal import stft
 
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -65,18 +71,140 @@ def download_preview(preview_url: str, out_path: Path, timeout: float = 60.0) ->
                 f.write(chunk)
 
 
+def _ensure_ffmpeg() -> str:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError(
+            "ffmpeg not found on PATH. It is required to decode Spotify preview MP3s into PCM audio "
+            "so we can compute mel-spectrograms."
+        )
+    return ffmpeg
+
+
+def mp3_to_wav_ffmpeg(mp3_path: Path, wav_path: Path, *, target_sr: int = 22050) -> None:
+    ffmpeg = _ensure_ffmpeg()
+    wav_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-i",
+        str(mp3_path),
+        "-ac",
+        "1",
+        "-ar",
+        str(target_sr),
+        "-vn",
+        str(wav_path),
+    ]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed decoding {mp3_path.name}:\n{p.stderr[:800]}")
+
+
+def _hz_to_mel(hz: np.ndarray) -> np.ndarray:
+    return 2595.0 * np.log10(1.0 + hz / 700.0)
+
+
+def _mel_to_hz(mel: np.ndarray) -> np.ndarray:
+    return 700.0 * (10.0 ** (mel / 2595.0) - 1.0)
+
+
+def _mel_filterbank(sr: int, n_fft: int, n_mels: int, fmin: float, fmax: float) -> np.ndarray:
+    n_freqs = n_fft // 2 + 1
+    fmax = min(float(fmax), float(sr) / 2.0)
+
+    m_min = _hz_to_mel(np.array([fmin], dtype=np.float64))[0]
+    m_max = _hz_to_mel(np.array([fmax], dtype=np.float64))[0]
+    m_pts = np.linspace(m_min, m_max, n_mels + 2, dtype=np.float64)
+    hz_pts = _mel_to_hz(m_pts)
+
+    bins = np.floor((n_fft + 1) * hz_pts / sr).astype(int)
+    bins = np.clip(bins, 0, n_freqs - 1)
+
+    fb = np.zeros((n_mels, n_freqs), dtype=np.float32)
+    for m in range(1, n_mels + 1):
+        left, center, right = bins[m - 1], bins[m], bins[m + 1]
+        if center == left:
+            center = min(left + 1, n_freqs - 1)
+        if right == center:
+            right = min(center + 1, n_freqs - 1)
+
+        if left < center:
+            fb[m - 1, left:center] = (np.arange(left, center) - left) / float(center - left)
+        if center < right:
+            fb[m - 1, center:right] = (right - np.arange(center, right)) / float(right - center)
+
+    # Slaney-style normalization
+    enorm = 2.0 / (hz_pts[2:n_mels + 2] - hz_pts[:n_mels])
+    fb *= enorm[:, None].astype(np.float32)
+    return fb
+
+
+def wav_to_log_mel_npz(
+    wav_path: Path,
+    out_npz_path: Path,
+    *,
+    n_fft: int = 1024,
+    hop_length: int = 256,
+    n_mels: int = 128,
+    fmin: float = 20.0,
+    fmax: float = 11025.0,
+) -> None:
+    sr, x = wavfile.read(str(wav_path))
+
+    # Ensure mono
+    if x.ndim != 1:
+        x = x.mean(axis=1)
+
+    # Convert to float32 in [-1, 1]
+    if np.issubdtype(x.dtype, np.integer):
+        maxv = float(np.iinfo(x.dtype).max)
+        x = (x.astype(np.float32) / maxv).clip(-1.0, 1.0)
+    else:
+        x = x.astype(np.float32)
+
+    # STFT power spectrogram
+    _f, _t, z = stft(
+        x,
+        fs=sr,
+        nperseg=n_fft,
+        noverlap=n_fft - hop_length,
+        nfft=n_fft,
+        padded=False,
+        boundary=None,
+    )
+    power = (np.abs(z) ** 2).astype(np.float32)  # [freq, time]
+
+    fb = _mel_filterbank(sr=sr, n_fft=n_fft, n_mels=n_mels, fmin=fmin, fmax=min(fmax, sr / 2))
+    mel = fb @ power  # [mels, time]
+    mel = np.maximum(mel, 1e-10)
+    log_mel = np.log(mel).astype(np.float16)
+
+    out_npz_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        out_npz_path,
+        log_mel=log_mel,
+        sr=np.int32(sr),
+        n_fft=np.int32(n_fft),
+        hop_length=np.int32(hop_length),
+        n_mels=np.int32(n_mels),
+    )
+
+
 def translate_lastfm_to_spotify(
     in_csv: Path,
     out_csv: Path,
     mp3_dir: Path,
     *,
+    features_dir: Path,
     max_rows: int | None = None,
     sleep_sec: float = 0.10,
+    keep_mp3: bool = False,
 ) -> None:
     client_id = SPOTIFY_CLIENT_ID
     client_secret = SPOTIFY_CLIENT_SECRET
     if not client_id or not client_secret:
-        raise RuntimeError("Missing SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET environment variables.")
+        raise RuntimeError("Missing Spotify client credentials (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET).")
 
     token = get_spotify_token(client_id, client_secret)
 
@@ -93,6 +221,8 @@ def translate_lastfm_to_spotify(
             "matched_artist_name",
             "popularity",
             "downloaded_preview_path",
+            "feature_path",
+            "feature_status",
             "match_status",
         ]
         w = csv.DictWriter(f_out, fieldnames=fieldnames)
@@ -115,6 +245,8 @@ def translate_lastfm_to_spotify(
                 "matched_artist_name": "",
                 "popularity": "",
                 "downloaded_preview_path": "",
+                "feature_path": "",
+                "feature_status": "",
                 "match_status": "",
             }
 
@@ -140,16 +272,57 @@ def translate_lastfm_to_spotify(
             result["popularity"] = str(item.get("popularity") or "")
 
             preview_url = result["preview_url"]
-            if preview_url:
-                filename = f"{slugify(result['matched_artist_name'] or artist)}__{slugify(result['matched_track_name'] or track)}__{result['spotify_track_id']}.mp3"
-                out_path = mp3_dir / filename
+            track_id = result["spotify_track_id"]
+
+            if preview_url and track_id:
+                mp3_name = f"{slugify(result['matched_artist_name'] or artist)}__{slugify(result['matched_track_name'] or track)}__{track_id}.mp3"
+                mp3_path = mp3_dir / mp3_name
+                feature_path = features_dir / f"{track_id}.npz"
+                result["feature_path"] = str(feature_path)
+
                 try:
-                    download_preview(preview_url, out_path)
-                    result["downloaded_preview_path"] = str(out_path)
-                    result["match_status"] = "matched_preview_downloaded"
+                    # Resumable: if features exist, skip everything
+                    if feature_path.exists() and feature_path.stat().st_size > 0:
+                        result["feature_status"] = "features_already_exist"
+                        result["match_status"] = "matched_features_ready"
+                        w.writerow(result)
+                        time.sleep(sleep_sec)
+                        continue
+
+                    # Download MP3 preview if missing
+                    if not (mp3_path.exists() and mp3_path.stat().st_size > 0):
+                        download_preview(preview_url, mp3_path)
+                    result["downloaded_preview_path"] = str(mp3_path)
+
+                    # Decode and extract mel
+                    tmp_wav = feature_path.with_suffix(".tmp.wav")
+                    mp3_to_wav_ffmpeg(mp3_path, tmp_wav, target_sr=22050)
+                    wav_to_log_mel_npz(tmp_wav, feature_path)
+
+                    # Cleanup temp WAV
+                    try:
+                        tmp_wav.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+                    # Delete MP3 unless you want to keep it
+                    if not keep_mp3:
+                        try:
+                            mp3_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+
+                    result["feature_status"] = "features_created"
+                    result["match_status"] = "matched_features_ready"
+
                 except requests.RequestException:
+                    result["feature_status"] = "preview_download_failed"
                     result["match_status"] = "matched_preview_download_failed"
+                except Exception:
+                    result["feature_status"] = "feature_extraction_failed"
+                    result["match_status"] = "matched_feature_extraction_failed"
             else:
+                result["feature_status"] = "no_preview"
                 result["match_status"] = "matched_no_preview"
 
             w.writerow(result)
@@ -160,9 +333,18 @@ if __name__ == "__main__":
     base = Path("TrainingData") / "data"
     in_csv = base / "lastfm_candidates_pop.csv"
 
-    resolved_dir = base / "spotify_resolved"
-    out_csv = resolved_dir / "spotify_resolved_pop.csv"
-    mp3_dir = base / "mp3_files" / "spotify_previews"
+    resolved_dir = base / "spotify_resolved" / "pop"
+    out_csv = resolved_dir / "resolved.csv"
+    mp3_dir = resolved_dir / "previews"
+    features_dir = resolved_dir / "features"
 
-    translate_lastfm_to_spotify(in_csv, out_csv, mp3_dir, max_rows=100)
+    translate_lastfm_to_spotify(
+        in_csv,
+        out_csv,
+        mp3_dir,
+        features_dir=features_dir,
+        max_rows=100,
+        keep_mp3=False,
+        sleep_sec=0.10,
+    )
     print(f"Wrote: {out_csv}")
