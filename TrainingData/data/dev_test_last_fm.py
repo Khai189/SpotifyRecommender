@@ -59,5 +59,5 @@ def get_artist_info(artist):
     return response
 
 artist_info = get_artist_info("HUNTR/X")
-jprint(artist_info.json())
+
 
