@@ -1,7 +1,7 @@
 import torch
 import torchaudio
-from feature_extraction import *
-from rhythm_embedding import *
+from training_scripts.training_scripts.feature_extraction import *
+from training_scripts.training_scripts.rhythm_embedding import *
 
 def stem_embed_from_path(wav_path: str, max_seconds: float = 60.0) -> tuple[torch.Tensor, torch.Tensor]:
     waveform, sr = torchaudio.load(wav_path)
