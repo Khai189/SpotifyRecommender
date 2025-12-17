@@ -26,6 +26,14 @@ def slugify(s: str) -> str:
     s = re.sub(r"[\s_-]+", "_", s)
     return s[:120] if s else "unknown"
 
+def clean_track_name(track_name: str) -> str:
+    """Removes common extraneous text from track names."""
+    # Remove anything in parentheses (e.g., "(feat. ...)", "(Radio Edit)")
+    track_name = re.sub(r"\s*\(.*?\)\s*", "", track_name)
+    # Remove anything after a hyphen (e.g., "- 2012 Remaster")
+    track_name = track_name.split("-")[0]
+    return track_name.strip()
+
 
 def get_spotify_token(client_id: str, client_secret: str, timeout: float = 30.0) -> str:
     r = requests.post(
@@ -265,6 +273,7 @@ def translate_lastfm_to_spotify(
 
             artist = (row.get("artist_name") or "").strip()
             track = (row.get("track_name") or "").strip()
+            cleaned_track = clean_track_name(track)
 
             result = {
                 **row,
@@ -281,12 +290,12 @@ def translate_lastfm_to_spotify(
                 "match_status": "",
             }
 
-            if not artist or not track:
+            if not artist or not cleaned_track:
                 result["match_status"] = "skipped_empty"
                 w.writerow(result)
                 continue
 
-            item = search_track(token, artist, track)
+            item = search_track(token, artist, cleaned_track)
             if not item:
                 result["match_status"] = "not_found"
                 w.writerow(result)
