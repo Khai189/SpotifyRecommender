@@ -97,13 +97,13 @@ def download_audio_from_youtube(artist: str, track: str, out_path: Path) -> None
     command = [
         "yt-dlp",
         "-f", "bestaudio",
+        "--cookies-from-browser", "chrome",
         "--extract-audio",
         "--audio-format", "m4a",
         "--audio-quality", "0",
         "--js-runtimes", "node",
-        "--cookies-from-browser", "chrome",
+        "--remote-components", "ejs:github",
         "--output", str(out_path),
-        # The search query
         search_query,
     ]
 
