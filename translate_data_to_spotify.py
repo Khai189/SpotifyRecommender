@@ -384,20 +384,30 @@ def translate_lastfm_to_spotify(
 
 if __name__ == "__main__":
     base = Path("TrainingData") / "data"
-    in_csv = base / "lastfm_candidates_pop.csv"
+    
+    genres_to_process = ["pop", "indie pop", "synthpop", "hip-hop", "electronic"]
 
-    resolved_dir = base / "spotify_resolved" / "pop"
-    out_csv = resolved_dir / "resolved.csv"
-    audio_dir = resolved_dir / "previews"
-    features_dir = resolved_dir / "features"
+    for tag in genres_to_process:
+        print(f"\n--- Processing data for tag: {tag} ---")
+        
+        in_csv = base / f"lastfm_candidates_{tag}.csv"
+        
+        resolved_dir = base / "spotify_resolved" / tag
+        out_csv = resolved_dir / "resolved.csv"
+        audio_dir = resolved_dir / "previews"
+        features_dir = resolved_dir / "features"
 
-    translate_lastfm_to_spotify(
-        in_csv,
-        out_csv,
-        audio_dir,
-        features_dir=features_dir,
-        max_rows=100,
-        keep_audio=False,
-        sleep_sec=0.10,
-    )
-    print(f"Wrote: {out_csv}")
+        if not in_csv.exists():
+            print(f"Warning: Input file {in_csv} not found. Skipping.")
+            continue
+
+        translate_lastfm_to_spotify(
+            in_csv,
+            out_csv,
+            audio_dir,
+            features_dir=features_dir,
+            max_rows=100,
+            keep_audio=False,
+            sleep_sec=0.10,
+        )
+        print(f"Finished processing for {tag}. Wrote: {out_csv}")
