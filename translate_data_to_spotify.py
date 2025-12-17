@@ -100,17 +100,15 @@ def download_audio_from_youtube(artist: str, track: str, out_path: Path) -> None
         "--extract-audio",
         "--audio-format", "m4a",
         "--audio-quality", "0",
-        "--js-runtimes", "node"
+        "--js-runtimes", "node",
         "--output", str(out_path),
+        # The search query
         search_query,
     ]
 
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp command failed for '{search_query}'. Stderr: {result.stderr[:500]}")
-
-    if not out_path.exists() or out_path.stat().st_size == 0:
-        raise RuntimeError(f"yt-dlp ran but failed to create a valid output file for '{search_query}'.")
+        raise RuntimeError(f"yt-dlp failed for '{artist} - {track}': {result.stderr[:500]}")
 
 
 
