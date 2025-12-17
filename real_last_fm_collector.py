@@ -228,16 +228,22 @@ def main() -> None:
     user_agent = os.environ.get("USER_AGENT") or "spotifyrecommender-dev/1.0"
     client = LastFMClient(api_key=api_key_last_fm, user_agent=user_agent)
 
-    tag = "pop"
-    candidates = client.iter_tag_top_tracks(tag=tag, pages=60, limit=200)  # up to 12,000 rows
-    out_csv = os.path.join("TrainingData", "data", f"lastfm_candidates_{tag}.csv")
-    n = write_candidates_csv(candidates, out_csv)
-    print(f"Wrote {n} candidates to {out_csv}")
+    genres_to_collect = ["pop", "indie pop", "synthpop", "hip-hop", "rock", "electronic"]
 
-    candidates = client.iter_chart_top_tracks(pages=50, limit=200)
-    out_csv = os.path.join("TrainingData", "data", "lastfm_candidates_chart.csv")
-    n = write_candidates_csv(candidates, out_csv)
-    print(f"Wrote {n} candidates to {out_csv}")
+    for tag in genres_to_collect:
+        print(f"\n--- Collecting data for tag: {tag} ---")
+        # Use a smaller number of pages for a quicker test run
+        candidates = client.iter_tag_top_tracks(tag=tag, pages=30, limit=200)
+        out_csv = os.path.join("TrainingData", "data", f"lastfm_candidates_{tag}.csv")
+        n = write_candidates_csv(candidates, out_csv)
+        print(f"Wrote {n} candidates to {out_csv}")
+
+    # The chart collector can be run separately if desired
+    # print("\n--- Collecting data for global chart ---")
+    # candidates = client.iter_chart_top_tracks(pages=50, limit=200)
+    # out_csv = os.path.join("TrainingData", "data", "lastfm_candidates_chart.csv")
+    # n = write_candidates_csv(candidates, out_csv)
+    # print(f"Wrote {n} candidates to {out_csv}")
 
 
 if __name__ == "__main__":
