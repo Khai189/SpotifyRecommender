@@ -6,7 +6,6 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Using the same environment variables as populate_db.py
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_NAME = os.environ.get("DB_NAME", "spotify_recommender")
 DB_USER = os.environ.get("DB_USER", "khai")
@@ -53,8 +52,6 @@ def recommend(spotify_track_id):
         
         query_vector = result[0]
 
-        # --- Step 2: Perform the similarity search using pgvector ---
-        # The <-> operator is the Euclidean distance operator from pgvector
         cur.execute(
             """
             SELECT t.spotify_track_id, t.track_name, t.artist_name, t.spotify_url, e.embedding_vector <-> %s AS distance
@@ -70,7 +67,6 @@ def recommend(spotify_track_id):
         
         recommendations = cur.fetchall()
 
-        # --- Step 3: Format the results into a JSON response ---
         recommendation_list = []
         for row in recommendations:
             recommendation_list.append({
@@ -94,10 +90,5 @@ def recommend(spotify_track_id):
         if conn:
             conn.close()
 
-# --- Main execution ---
 if __name__ == '__main__':
-    # To run this app:
-    # 1. Set the same DB environment variables as for populate_db.py
-    # 2. Run the command: flask --app app run
-    # 3. Open your browser to http://127.0.0.1:5000/recommend/some_spotify_id
     app.run(debug=True)
