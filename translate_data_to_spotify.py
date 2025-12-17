@@ -101,6 +101,7 @@ def download_audio_from_youtube(artist: str, track: str, out_path: Path) -> None
         "--audio-format", "m4a",
         "--audio-quality", "0",
         "--js-runtimes", "node",
+        "--cookies-from-browser", "chrome",
         "--output", str(out_path),
         # The search query
         search_query,
@@ -386,7 +387,7 @@ def translate_lastfm_to_spotify(
 if __name__ == "__main__":
     base = Path("TrainingData") / "data"
     
-    genres_to_process = ["pop", "indie pop", "synthpop", "hip-hop", "electronic"]
+    genres_to_process = ["rock", "alternative", "punk", "metal"]
 
     for tag in genres_to_process:
         print(f"\n--- Processing data for tag: {tag} ---")
@@ -407,7 +408,7 @@ if __name__ == "__main__":
             out_csv,
             audio_dir,
             features_dir=features_dir,
-            max_rows=110,
+            max_rows=50,
             keep_audio=False,
             sleep_sec=0.10,
         )
