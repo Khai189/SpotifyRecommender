@@ -6,7 +6,6 @@ from pathlib import Path
 import sys
 from typing import Tuple, Dict
 
-# Add the parent directory to the system path to allow imports from other folders
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from training_scripts.training_scripts.ranking import rank_by_distance
