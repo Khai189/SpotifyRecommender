@@ -12,11 +12,9 @@ CREATE TABLE tracks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create an index on the spotify_track_id for fast lookups.
 CREATE INDEX idx_tracks_spotify_track_id ON tracks(spotify_track_id);
 
 
--- This table is separate from 'tracks' for efficiency.
 CREATE TABLE embeddings (
     id BIGSERIAL PRIMARY KEY,
     track_id BIGINT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
@@ -25,7 +23,6 @@ CREATE TABLE embeddings (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create an index on the track_id for joining with the 'tracks' table.
 CREATE INDEX idx_embeddings_track_id ON embeddings(track_id);
 
 
