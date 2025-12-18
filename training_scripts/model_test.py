@@ -64,7 +64,7 @@ def create_temporal_embedding(log_mel: torch.Tensor, sr: int = 22050, num_chunks
 
     embedding = torch.cat(all_chunk_stats, dim=0)
     
-    return torch.nn.functional.normalize(embedding, dim=0)
+    return embedding
 
 def load_all_data_from_subdirs(base_dir: Path) -> Tuple[Dict[str, torch.Tensor], pd.DataFrame]:
     """
