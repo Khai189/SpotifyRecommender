@@ -95,7 +95,7 @@ def load_all_data_from_subdirs(base_dir: Path) -> Tuple[Dict[str, torch.Tensor],
     print(f"\nLoaded a total of {len(metadata_df)} unique tracks from metadata.")
 
     embedding_library = {}
-    print(f"Generating embeddings for {len(all_feature_files)} feature files...")
+    print(f"Generating embeddings for {len(all_feature_files)} feature files")
     for feature_file in all_feature_files:
         track_id = feature_file.stem
         if track_id in metadata_df.index:
@@ -138,10 +138,10 @@ def main():
 
     ranking_library = {tid: vec for tid, vec in embedding_library.items() if tid != query_track_id}
     
-    top_k = 20
+    top_k = 10
     recommendations = rank_by_distance(query_vector, ranking_library, top_k=top_k)
 
-    print(f"Top {top_k} recommendations (ranked by Euclidean Distance - lower is better):")
+    print(f"Top {top_k} recommendations (ranked by Euclidean Distance, the lower the distance the better):")
     for i, (track_id, distance) in enumerate(recommendations):
         try:
             song_info = metadata_df.loc[track_id]
