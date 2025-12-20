@@ -45,8 +45,8 @@ def get_recommendations(spotify_id):
 st.set_page_config(page_title="Spotify Recommender", layout="wide")
 
 st.title("🎵 Spotify Song Recommender")
-st.write("Enter a Spotify song URL or Track ID to get recommendations based on audio features.")
-
+st.write("Enter a Spotify song URL or Track ID to get recommendations based on its audio features.")
+st.write("")
 with st.form(key="recommendation_form"):
     spotify_input = st.text_input(
         label="Spotify Song URL or Track ID",
@@ -67,18 +67,17 @@ if submit_button and spotify_input:
 
         if recommendations:
             if "error" in recommendations:
-                st.error(f"API Error: {recommendations['error']}")
+                st.error("Sorry, your inputted Spotify URL is either not valid or isn't currently supported by our database.")
             else:
                 st.success("Top 20 recommendations!")
                 
-                # Create columns for a cleaner layout
                 cols = st.columns(4)
                 for i, track in enumerate(recommendations):
                     with cols[i % 4]:
                         st.markdown(f"**{i+1}. {track['track_name']}**")
                         st.markdown(f"_{track['artist_name']}_")
                         st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
-                        st.progress(1 - track['distance'] / 1500) # Normalize distance for progress bar
+                        st.progress(1 - track['distance'] / 1500)
                         st.markdown("---")
 
 st.sidebar.header("About")
