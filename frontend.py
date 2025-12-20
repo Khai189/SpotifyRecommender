@@ -143,7 +143,7 @@ if sp:
 else:
     # User is NOT logged in
     if auth_manager:
-        st.write("Want to recommend based on what you're listening to?")
+        st.write("Want us to custom recommend based on whatever you're listening to?")
         auth_url = auth_manager.get_authorize_url()
         st.link_button("Connect with Spotify", auth_url)
     else:
