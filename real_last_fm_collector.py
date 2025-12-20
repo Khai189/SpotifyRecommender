@@ -228,7 +228,7 @@ def main() -> None:
     user_agent = os.environ.get("USER_AGENT") or "spotifyrecommender-dev/1.0"
     client = LastFMClient(api_key=api_key_last_fm, user_agent=user_agent)
 
-    genres_to_collect = ["pop", "indie pop", "synthpop", "hip-hop", "electronic"]
+    genres_to_collect = ["rock", "alternative", "punk", "metal"]
 
     for tag in genres_to_collect:
         print(f"\n--- Collecting data for tag: {tag} ---")
