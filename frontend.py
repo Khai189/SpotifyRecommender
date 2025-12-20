@@ -77,7 +77,8 @@ if submit_button and spotify_input:
                         st.markdown(f"**{i+1}. {track['track_name']}**")
                         st.markdown(f"_{track['artist_name']}_")
                         st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
-                        st.progress(1 - track['distance'] / 1500)
+                        progress_value = 1 - (track['distance'] / 1500)
+                        st.progress(max(0.0, min(progress_value, 1.0)))
                         st.markdown("---")
 
 st.sidebar.header("About")
