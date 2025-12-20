@@ -60,10 +60,11 @@ if submit_button and spotify_input:
     if not spotify_id:
         st.error("Please enter a valid Spotify URL or Track ID.")
     else:
-        st.write(f"Fetching recommendations for Spotify ID: `{spotify_id}`")
-        
+        status_placeholder = st.empty()
+        status_placeholder.info(f"Fetching recommendations for Spotify ID: `{spotify_id}`")
         with st.spinner("Contacting the recommendation engine..."):
             recommendations = get_recommendations(spotify_id)
+        status_placeholder.empty()
 
         if recommendations:
             if "error" in recommendations:
