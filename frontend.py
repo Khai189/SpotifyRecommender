@@ -118,41 +118,39 @@ else:
 
 st.write("Enter a Spotify song URL, Track ID, or use your current playback.")
 
-col1, col2 = st.columns([2, 1])
+# Input Form
+with st.form(key="recommendation_form"):
+    spotify_input = st.text_input(
+        label="Spotify Song URL or Track ID",
+        placeholder="e.g., https://open.spotify.com/track/5TRPicyLGbAF2LGBFbHGvO"
+    )
+    submit_button = st.form_submit_button(label="Get Recommendations")
 
-with col1:
-    with st.form(key="recommendation_form"):
-        spotify_input = st.text_input(
-            label="Spotify Song URL or Track ID",
-            placeholder="e.g., https://open.spotify.com/track/5TRPicyLGbAF2LGBFbHGvO"
-        )
-        submit_button = st.form_submit_button(label="Get Recommendations")
-
-with col2:
-    st.write("") # Spacer
-    st.write("") # Spacer
-    if sp:
-        if st.button("🎧 Use Current Song"):
-            try:
-                current_track = sp.current_user_playing_track()
-                if current_track and current_track.get("item"):
-                    track_item = current_track["item"]
-                    track_name = track_item["name"]
-                    artist_name = track_item["artists"][0]["name"]
-                    track_id = track_item["id"]
-                    
-                    st.info(f"Detected: **{track_name}** by *{artist_name}*")
-                    # Auto-fill logic isn't possible in Streamlit forms easily, so we just run the logic directly
-                    spotify_input = track_id 
-                    submit_button = True # Force submit
-                else:
-                    st.warning("No song currently playing on your Spotify.")
-            except Exception as e:
-                st.error(f"Error fetching current song: {e}")
-                # If token expired, clear it
-                if "token_info" in st.session_state:
-                    del st.session_state["token_info"]
-                    st.rerun()
+# Spotify Integration Button (Below Form)
+if sp:
+    st.write("---")
+    st.write("Or use what you're listening to right now:")
+    if st.button("🎧 Use Current Song"):
+        try:
+            current_track = sp.current_user_playing_track()
+            if current_track and current_track.get("item"):
+                track_item = current_track["item"]
+                track_name = track_item["name"]
+                artist_name = track_item["artists"][0]["name"]
+                track_id = track_item["id"]
+                
+                st.info(f"Detected: **{track_name}** by *{artist_name}*")
+                # Auto-fill logic isn't possible in Streamlit forms easily, so we just run the logic directly
+                spotify_input = track_id 
+                submit_button = True # Force submit
+            else:
+                st.warning("No song currently playing on your Spotify.")
+        except Exception as e:
+            st.error(f"Error fetching current song: {e}")
+            # If token expired, clear it
+            if "token_info" in st.session_state:
+                del st.session_state["token_info"]
+                st.rerun()
 
 # --- Logic ---
 
