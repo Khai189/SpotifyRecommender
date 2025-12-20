@@ -69,7 +69,7 @@ if submit_button and spotify_input:
             if "error" in recommendations:
                 st.error(f"API Error: {recommendations['error']}")
             else:
-                st.success("Here are your top 20 recommendations!")
+                st.success("Top 20 recommendations!")
                 
                 # Create columns for a cleaner layout
                 cols = st.columns(4)
