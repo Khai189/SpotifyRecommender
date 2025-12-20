@@ -69,7 +69,9 @@ if submit_button and spotify_input:
             if "error" in recommendations:
                 st.error("Sorry, your inputted Spotify URL is either not valid or isn't currently supported by our database.")
             else:
-                st.success("Top 20 recommendations!")
+                st.success("Here's the 20 songs we think you'll like best!")
+                st.write("---")
+                st.write("Songs are ranked with a progress bar, the closer it is to full the better you may like the song")
                 
                 cols = st.columns(4)
                 for i, track in enumerate(recommendations):
