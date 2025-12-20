@@ -15,7 +15,8 @@ def extract_spotify_id(url_or_id):
 def get_recommendations(spotify_id):
     """Calls the backend API and handles the response."""
     full_url = f"{API_GATEWAY_URL}/{spotify_id}"
-    st.info(f"Calling API: {full_url}")
+    status_placeholder = st.empty()
+    status_placeholder.info(f"Calling API: {full_url}")
 
     try:
         response = requests.get(full_url, timeout=20) # 20-second timeout for initial call
@@ -32,6 +33,7 @@ def get_recommendations(spotify_id):
             response = requests.get(full_url, timeout=30)
             response.raise_for_status()
             data = response.json()
+            status_placeholder.empty()
 
         return data
 
@@ -60,11 +62,10 @@ if submit_button and spotify_input:
     if not spotify_id:
         st.error("Please enter a valid Spotify URL or Track ID.")
     else:
-        status_placeholder = st.empty()
-        status_placeholder.info(f"Fetching recommendations for Spotify ID: `{spotify_id}`")
+        st.write(f"Fetching recommendations for Spotify ID: `{spotify_id}`")
+
         with st.spinner("Contacting the recommendation engine..."):
             recommendations = get_recommendations(spotify_id)
-        status_placeholder.empty()
 
         if recommendations:
             if "error" in recommendations:
