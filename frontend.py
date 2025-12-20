@@ -56,7 +56,7 @@ def get_recommendations(spotify_id):
         return data
 
     except requests.exceptions.RequestException as e:
-        st.error(f"An error occurred while calling the API: {e}")
+        st.error(f"Sorry, this song isn't currently in our database. Please try another.")
         return None
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
@@ -80,14 +80,10 @@ st.set_page_config(page_title="Spotify Recommender", layout="wide")
 
 st.title("🎵 Spotify Song Recommender")
 
-# --- Sidebar: Spotify Login ---
-st.sidebar.header("Spotify Integration")
 auth_manager = get_spotify_auth_manager()
+sp = None
 
-if not auth_manager:
-    st.sidebar.warning("Spotify credentials not found. Please set secrets in .streamlit/secrets.toml or Streamlit Cloud settings.")
-    sp = None
-else:
+if auth_manager:
     # Check for cached token in session state
     if "token_info" not in st.session_state:
         # Try to get token from URL code
@@ -98,21 +94,14 @@ else:
                 # Clear query params to clean URL
                 st.query_params.clear()
         except Exception as e:
-            st.sidebar.error(f"Auth Error: {e}")
+            st.error(f"Auth Error: {e}")
 
     if "token_info" in st.session_state:
-        st.sidebar.success("Connected to Spotify!")
         sp = spotipy.Spotify(auth=st.session_state["token_info"]["access_token"])
-        
-        if st.sidebar.button("Disconnect"):
+        # Show disconnect button in sidebar only
+        if st.sidebar.button("Disconnect Spotify"):
             del st.session_state["token_info"]
             st.rerun()
-    else:
-        st.sidebar.info("Connect your account to get recommendations for what you're listening to right now.")
-        # Create auth link
-        auth_url = auth_manager.get_authorize_url()
-        st.sidebar.link_button("Connect with Spotify", auth_url)
-        sp = None
 
 # --- Main Content ---
 
@@ -126,9 +115,11 @@ with st.form(key="recommendation_form"):
     )
     submit_button = st.form_submit_button(label="Get Recommendations")
 
-# Spotify Integration Button (Below Form)
+st.write("---")
+
+# Spotify Integration Section (Below Form)
 if sp:
-    st.write("---")
+    # User is logged in
     st.write("Or use what you're listening to right now:")
     if st.button("🎧 Use Current Song"):
         try:
@@ -140,17 +131,23 @@ if sp:
                 track_id = track_item["id"]
                 
                 st.info(f"Detected: **{track_name}** by *{artist_name}*")
-                # Auto-fill logic isn't possible in Streamlit forms easily, so we just run the logic directly
                 spotify_input = track_id 
                 submit_button = True # Force submit
             else:
                 st.warning("No song currently playing on your Spotify.")
         except Exception as e:
             st.error(f"Error fetching current song: {e}")
-            # If token expired, clear it
             if "token_info" in st.session_state:
                 del st.session_state["token_info"]
                 st.rerun()
+else:
+    # User is NOT logged in
+    if auth_manager:
+        st.write("Want to recommend based on what you're listening to?")
+        auth_url = auth_manager.get_authorize_url()
+        st.link_button("Connect with Spotify", auth_url)
+    else:
+        st.warning("Spotify credentials not configured.")
 
 # --- Logic ---
 
