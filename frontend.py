@@ -56,7 +56,7 @@ def get_recommendations(spotify_id):
         return data
 
     except requests.exceptions.RequestException as e:
-        st.error(f"Sorry, this song isn't currently in our database. Please try another.")
+        st.error(f"An error occurred while calling the API: {e}")
         return None
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
@@ -66,11 +66,13 @@ def get_spotify_auth_manager():
     """Creates a SpotifyOAuth manager."""
     if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
         return None
+    # ADDED "user-modify-playback-state" to the scope for queue functionality
+    scope = "user-read-currently-playing user-read-playback-state user-modify-playback-state"
     return SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID,
         client_secret=SPOTIFY_CLIENT_SECRET,
         redirect_uri=SPOTIFY_REDIRECT_URI,
-        scope="user-read-currently-playing user-read-playback-state",
+        scope=scope,
         cache_path=None # Disable file cache for cloud compatibility
     )
 
@@ -80,6 +82,7 @@ st.set_page_config(page_title="Spotify Recommender", layout="wide")
 
 st.title("🎵 Spotify Song Recommender")
 
+# --- Auth Logic (Hidden) ---
 auth_manager = get_spotify_auth_manager()
 sp = None
 
@@ -97,6 +100,12 @@ if auth_manager:
             st.error(f"Auth Error: {e}")
 
     if "token_info" in st.session_state:
+        # Check if token is expired and refresh if needed
+        now = int(time.time())
+        is_token_expired = st.session_state["token_info"]["expires_at"] - now < 60
+        if is_token_expired:
+            st.session_state["token_info"] = auth_manager.refresh_access_token(st.session_state["token_info"]["refresh_token"])
+
         sp = spotipy.Spotify(auth=st.session_state["token_info"]["access_token"])
         # Show disconnect button in sidebar only
         if st.sidebar.button("Disconnect Spotify"):
@@ -143,7 +152,7 @@ if sp:
 else:
     # User is NOT logged in
     if auth_manager:
-        st.write("Want us to custom recommend based on whatever you're listening to?")
+        st.write("Want to recommend based on what you're listening to?")
         auth_url = auth_manager.get_authorize_url()
         st.link_button("Connect with Spotify", auth_url)
     else:
@@ -175,7 +184,23 @@ if submit_button and spotify_input:
                     with cols[i % 4]:
                         st.markdown(f"**{i+1}. {track['track_name']}**")
                         st.markdown(f"_{track['artist_name']}_")
-                        st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
+                        
+                        # Add to Queue Button
+                        if sp:
+                            # Use track's spotify_id as the unique key for the button
+                            if st.button("Add to Queue", key=track['spotify_track_id']):
+                                try:
+                                    sp.add_to_queue(track['spotify_track_id'])
+                                    st.toast(f"Added '{track['track_name']}' to queue!")
+                                except spotipy.exceptions.SpotifyException as e:
+                                    if "No active device found" in str(e):
+                                        st.warning("No active Spotify device found. Please start playing music first.")
+                                    else:
+                                        st.error(f"Error: {e}")
+                        else:
+                            # Fallback for users not logged into Spotify
+                            st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
+
                         progress_value = 1 - (track['distance'] / 1500)
                         st.progress(max(0.0, min(progress_value, 1.0)))
                         st.markdown("---")
