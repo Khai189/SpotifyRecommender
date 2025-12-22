@@ -174,7 +174,9 @@ if 'recommendations' in st.session_state and st.session_state['recommendations']
                 else:
                     st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
 
-                progress_value = 1 - (track['distance'] / 1500)
+                # Updated for Cosine Distance (0 to 1 range)
+                # Distance 0 = 100% match, Distance 1 = 0% match
+                progress_value = 1.0 - track['distance']
                 st.progress(max(0.0, min(progress_value, 1.0)))
                 st.markdown("---")
 
