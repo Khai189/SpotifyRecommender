@@ -7,7 +7,8 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
 # --- Configuration ---
-API_GATEWAY_URL = "https://4zpovu1pp7.execute-api.us-east-1.amazonaws.com/default/recommend" 
+API_GATEWAY_URL = "https://4zpovu1pp7.execute-api.us-east-1.amazonaws.com/default" 
+# Note: Removed /recommend from base URL so we can use /search too
 
 # --- Helper to get secrets safely ---
 def get_secret(key):
@@ -30,9 +31,22 @@ def extract_spotify_id(url_or_id):
         return match.group(1)
     return url_or_id
 
+def search_database(query):
+    """Searches the backend database for tracks."""
+    if not query or len(query) < 2: return []
+    try:
+        # Assumes API Gateway forwards /search to the backend
+        url = f"{API_GATEWAY_URL}/search"
+        response = requests.get(url, params={"q": query}, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+    except Exception as e:
+        st.error(f"Search failed: {e}")
+    return []
+
 def get_recommendations(spotify_id):
     """Calls the backend API and handles the response."""
-    full_url = f"{API_GATEWAY_URL}/{spotify_id}"
+    full_url = f"{API_GATEWAY_URL}/recommend/{spotify_id}"
     status_placeholder = st.empty()
     status_placeholder.info(f"Calling API: {full_url}")
 
@@ -94,65 +108,73 @@ if auth_manager:
 
 # --- Main Content ---
 
-st.write("Enter a Spotify song URL, Track ID, or use your current playback.")
+tab1, tab2, tab3 = st.tabs(["🔍 Search Database", "🔗 Paste URL", "🎧 Current Song"])
 
-# Input Form
-with st.form(key="recommendation_form"):
-    spotify_input = st.text_input(
-        label="Spotify Song URL or Track ID",
-        placeholder="e.g., https://open.spotify.com/track/5TRPicyLGbAF2LGBFbHGvO"
-    )
-    submit_button = st.form_submit_button(label="Get Recommendations")
+selected_spotify_id = None
+
+# TAB 1: Search Database
+with tab1:
+    st.write("Search for a song already in our database.")
+    search_query = st.text_input("Song or Artist Name", placeholder="e.g. Taylor Swift")
+    
+    if search_query:
+        results = search_database(search_query)
+        if results:
+            # Create a list of formatted strings for the selectbox
+            options = {f"{r['track_name']} - {r['artist_name']}": r['spotify_track_id'] for r in results}
+            selected_option = st.selectbox("Select a song:", list(options.keys()))
+            
+            if st.button("Get Recommendations from Search"):
+                selected_spotify_id = options[selected_option]
+        else:
+            st.info("No matches found in our database.")
+
+# TAB 2: Paste URL
+with tab2:
+    st.write("Paste a Spotify Link or Track ID.")
+    url_input = st.text_input("Spotify URL", placeholder="https://open.spotify.com/track/...")
+    if st.button("Get Recommendations from URL"):
+        selected_spotify_id = extract_spotify_id(url_input)
+
+# TAB 3: Current Song
+with tab3:
+    if sp:
+        st.write("Use what you're listening to right now.")
+        if st.button("Use Current Song"):
+            try:
+                current_track = sp.current_user_playing_track()
+                if current_track and current_track.get("item"):
+                    track_item = current_track["item"]
+                    st.info(f"Detected: **{track_item['name']}** by *{track_item['artists'][0]['name']}*")
+                    selected_spotify_id = track_item["id"]
+                else:
+                    st.warning("No song currently playing.")
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        if auth_manager:
+            st.write("Connect Spotify to use this feature.")
+            st.link_button("Connect with Spotify", auth_manager.get_authorize_url())
+        else:
+            st.warning("Spotify credentials not configured.")
 
 st.write("---")
 
-# Spotify Integration Section
-if sp:
-    st.write("Or use what you're listening to right now:")
-    if st.button("🎧 Use Current Song"):
-        try:
-            current_track = sp.current_user_playing_track()
-            if current_track and current_track.get("item"):
-                track_item = current_track["item"]
-                st.info(f"Detected: **{track_item['name']}** by *{track_item['artists'][0]['name']}*")
-                spotify_input = track_item["id"]
-                submit_button = True
-            else:
-                st.warning("No song currently playing on your Spotify.")
-        except Exception as e:
-            st.error(f"Error fetching current song: {e}")
-            if "token_info" in st.session_state:
-                del st.session_state["token_info"]
-                st.rerun()
-else:
-    if auth_manager:
-        st.write("Want to recommend based on what you're listening to?")
-        auth_url = auth_manager.get_authorize_url()
-        st.link_button("Connect with Spotify", auth_url)
-    else:
-        st.warning("Spotify credentials not configured.")
-
 # --- Logic to Fetch Recommendations ---
-if submit_button and spotify_input:
-    spotify_id = extract_spotify_id(spotify_input)
-    if not spotify_id:
-        st.error("Please enter a valid Spotify URL or Track ID.")
-    else:
-        st.write(f"Fetching recommendations for Spotify ID: `{spotify_id}`")
-        with st.spinner("Contacting the recommendation engine..."):
-            # Store results in session state
-            st.session_state['recommendations'] = get_recommendations(spotify_id)
-            st.session_state['query_id'] = spotify_id # Remember what we searched for
+if selected_spotify_id:
+    st.write(f"Fetching recommendations for Spotify ID: `{selected_spotify_id}`")
+    with st.spinner("Contacting the recommendation engine..."):
+        st.session_state['recommendations'] = get_recommendations(selected_spotify_id)
 
-# --- Display Results (checks session state) ---
+# --- Display Results ---
 if 'recommendations' in st.session_state and st.session_state['recommendations']:
     recommendations = st.session_state['recommendations']
     
     if "error" in recommendations:
-        st.error("Sorry, your inputted Spotify URL is either not valid or isn't currently supported by our database.")
+        st.error("Sorry, that song is not in our database yet.")
     else:
         st.success("Here are the 20 songs we think you'll like best!")
-        st.info("Songs are ranked with a progress bar; the closer it is to full, the better you may like the song.")
+        st.info("Songs are ranked by sonic similarity.")
         st.write("---")
         
         cols = st.columns(4)
@@ -168,27 +190,20 @@ if 'recommendations' in st.session_state and st.session_state['recommendations']
                             st.toast(f"Added '{track['track_name']}' to queue!")
                         except spotipy.exceptions.SpotifyException as e:
                             if "No active device found" in str(e):
-                                st.warning("No active Spotify device found. Please start playing music first.")
+                                st.warning("No active Spotify device found.")
                             else:
                                 st.error(f"Error: {e}")
                 else:
                     st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
 
-                # --- SCALED PROGRESS BAR ---
-                # Cosine distances are very small (0.01 - 0.02).
-                # We scale so that 0.05 distance = 0% match.
-                # Formula: Score = 1.0 - (distance / 0.05)
-                
+                # Scaled Progress Bar (Cosine Distance)
                 dist = track['distance']
-                scale_factor = 0.05 # Adjust this to change sensitivity
-                
+                scale_factor = 0.05 
                 progress_value = 1.0 - (dist / scale_factor)
-                
-                # Clamp between 0.0 and 1.0
                 final_score = max(0.0, min(progress_value, 1.0))
                 
                 st.progress(final_score)
-                st.caption(f"Similarity Score: {int(final_score * 100)}%") # Optional: Show raw %
+                st.caption(f"Similarity Score: {int(final_score * 100)}%")
                 st.markdown("---")
 
 # --- Sidebar ---
