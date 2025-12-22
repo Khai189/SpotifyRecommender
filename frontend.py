@@ -174,10 +174,21 @@ if 'recommendations' in st.session_state and st.session_state['recommendations']
                 else:
                     st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
 
-                # Updated for Cosine Distance (0 to 1 range)
-                # Distance 0 = 100% match, Distance 1 = 0% match
-                progress_value = 1.0 - track['distance']
-                st.progress(max(0.0, min(progress_value, 1.0)))
+                # --- SCALED PROGRESS BAR ---
+                # Cosine distances are very small (0.01 - 0.02).
+                # We scale so that 0.05 distance = 0% match.
+                # Formula: Score = 1.0 - (distance / 0.05)
+                
+                dist = track['distance']
+                scale_factor = 0.05 # Adjust this to change sensitivity
+                
+                progress_value = 1.0 - (dist / scale_factor)
+                
+                # Clamp between 0.0 and 1.0
+                final_score = max(0.0, min(progress_value, 1.0))
+                
+                st.progress(final_score)
+                st.caption(f"Similarity Score: {int(final_score * 100)}%") # Optional: Show raw %
                 st.markdown("---")
 
 # --- Sidebar ---
