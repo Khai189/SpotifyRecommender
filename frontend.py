@@ -115,6 +115,7 @@ selected_spotify_id = None
 # TAB 1: Search Database
 with tab1:
     st.write("Search for a song already in our database.")
+    st.caption("Type a song or artist name and press Enter to see matches.")
     search_query = st.text_input("Song or Artist Name", placeholder="e.g. Taylor Swift")
     
     if search_query:
@@ -132,6 +133,7 @@ with tab1:
 # TAB 2: Paste URL
 with tab2:
     st.write("Paste a Spotify Link or Track ID.")
+    st.caption("Copy the link from Spotify (Share -> Copy Link) and paste it here.")
     url_input = st.text_input("Spotify URL", placeholder="https://open.spotify.com/track/...")
     if st.button("Get Recommendations from URL"):
         selected_spotify_id = extract_spotify_id(url_input)
@@ -140,6 +142,7 @@ with tab2:
 with tab3:
     if sp:
         st.write("Use what you're listening to right now.")
+        st.caption("We'll detect your currently playing song on Spotify.")
         if st.button("Use Current Song"):
             try:
                 current_track = sp.current_user_playing_track()
