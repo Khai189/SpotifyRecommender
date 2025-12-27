@@ -6,36 +6,26 @@ import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-# --- Configuration ---
 API_GATEWAY_URL = "https://4zpovu1pp7.execute-api.us-east-1.amazonaws.com/default" 
-# Note: Removed /recommend from base URL so we can use /search too
 
-# --- Helper to get secrets safely ---
 def get_secret(key):
-    """Try to get secret from Streamlit secrets, then os.environ."""
     if key in st.secrets:
         return st.secrets[key]
     return os.environ.get(key)
 
-# Spotify OAuth Settings
 SPOTIFY_CLIENT_ID = get_secret("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = get_secret("SPOTIFY_CLIENT_SECRET")
 SPOTIFY_REDIRECT_URI = get_secret("SPOTIFY_REDIRECT_URI") or "http://localhost:8501"
 
-# --- Functions ---
-
 def extract_spotify_id(url_or_id):
-    """Extracts the Spotify Track ID from a URL or string."""
     match = re.search(r'track/([a-zA-Z0-9]+)', url_or_id)
     if match:
         return match.group(1)
     return url_or_id
 
 def search_database(query):
-    """Searches the backend database for tracks."""
     if not query or len(query) < 2: return []
     try:
-        # Assumes API Gateway forwards /search to the backend
         url = f"{API_GATEWAY_URL}/search"
         response = requests.get(url, params={"q": query}, timeout=10)
         if response.status_code == 200:
@@ -45,7 +35,6 @@ def search_database(query):
     return []
 
 def get_recommendations(spotify_id):
-    """Calls the backend API and handles the response."""
     full_url = f"{API_GATEWAY_URL}/recommend/{spotify_id}"
     status_placeholder = st.empty()
     status_placeholder.info(f"Calling API: {full_url}")
@@ -54,7 +43,7 @@ def get_recommendations(spotify_id):
         response = requests.get(full_url, timeout=20)
         response.raise_for_status()
         data = response.json()
-        status_placeholder.empty() # Clear status on success
+        status_placeholder.empty() 
         return data
     except requests.exceptions.RequestException as e:
         st.error(f"Sorry, this song is not yet in our database")
@@ -64,7 +53,6 @@ def get_recommendations(spotify_id):
         return None
 
 def get_spotify_auth_manager():
-    """Creates a SpotifyOAuth manager."""
     if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
         return None
     scope = "user-read-currently-playing user-read-playback-state user-modify-playback-state"
@@ -76,12 +64,9 @@ def get_spotify_auth_manager():
         cache_path=None
     )
 
-# --- UI ---
-
 st.set_page_config(page_title="Spotify Recommender", layout="wide")
 st.title("🎵 Spotify Song Recommender")
 
-# --- Auth Logic (Hidden) ---
 auth_manager = get_spotify_auth_manager()
 sp = None
 
@@ -106,13 +91,12 @@ if auth_manager:
             del st.session_state["token_info"]
             st.rerun()
 
-# --- Main Content ---
+st.write("Enter a Spotify song URL, Track ID, or use your current playback.")
 
 tab1, tab2, tab3 = st.tabs(["🔍 Search Database", "🔗 Paste URL", "🎧 Current Song"])
 
 selected_spotify_id = None
 
-# TAB 1: Search Database
 with tab1:
     st.write("Search for a song already in our database.")
     st.caption("Type a song or artist name and press Enter to see matches.")
@@ -121,7 +105,6 @@ with tab1:
     if search_query:
         results = search_database(search_query)
         if results:
-            # Create a list of formatted strings for the selectbox
             options = {f"{r['track_name']} - {r['artist_name']}": r['spotify_track_id'] for r in results}
             selected_option = st.selectbox("Select a song:", list(options.keys()))
             
@@ -130,7 +113,6 @@ with tab1:
         else:
             st.info("No matches found in our database.")
 
-# TAB 2: Paste URL
 with tab2:
     st.write("Paste a Spotify Link or Track ID.")
     st.caption("Copy the link from Spotify (Share -> Copy Link) and paste it here.")
@@ -138,7 +120,6 @@ with tab2:
     if st.button("Get Recommendations from URL"):
         selected_spotify_id = extract_spotify_id(url_input)
 
-# TAB 3: Current Song
 with tab3:
     if sp:
         st.write("Use what you're listening to right now.")
@@ -157,19 +138,18 @@ with tab3:
     else:
         if auth_manager:
             st.write("Connect Spotify to use this feature.")
-            st.link_button("Connect with Spotify", auth_manager.get_authorize_url())
+            auth_url = auth_manager.get_authorize_url()
+            st.markdown(f'<a href="{auth_url}" target="_self" style="background-color: #1DB954; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">Connect with Spotify</a>', unsafe_allow_html=True)
         else:
             st.warning("Spotify credentials not configured.")
 
 st.write("---")
 
-# --- Logic to Fetch Recommendations ---
 if selected_spotify_id:
     st.write(f"Fetching recommendations for Spotify ID: `{selected_spotify_id}`")
     with st.spinner("Contacting the recommendation engine..."):
         st.session_state['recommendations'] = get_recommendations(selected_spotify_id)
 
-# --- Display Results ---
 if 'recommendations' in st.session_state and st.session_state['recommendations']:
     recommendations = st.session_state['recommendations']
     
@@ -199,7 +179,6 @@ if 'recommendations' in st.session_state and st.session_state['recommendations']
                 else:
                     st.markdown(f"[Listen on Spotify]({track['spotify_url']})")
 
-                # Scaled Progress Bar (Cosine Distance)
                 dist = track['distance']
                 scale_factor = 0.05 
                 progress_value = 1.0 - (dist / scale_factor)
@@ -209,7 +188,6 @@ if 'recommendations' in st.session_state and st.session_state['recommendations']
                 st.caption(f"Similarity Score: {int(final_score * 100)}%")
                 st.markdown("---")
 
-# --- Sidebar ---
 st.sidebar.header("About")
 st.sidebar.info(
     "This app uses a machine learning model to find sonically similar songs. "
