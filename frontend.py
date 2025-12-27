@@ -138,8 +138,7 @@ with tab3:
     else:
         if auth_manager:
             st.write("Connect Spotify to use this feature.")
-            auth_url = auth_manager.get_authorize_url()
-            st.markdown(f'<a href="{auth_url}" target="_top" style="background-color: #1DB954; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">Connect with Spotify</a>', unsafe_allow_html=True)
+            st.link_button("Connect with Spotify", auth_manager.get_authorize_url())
         else:
             st.warning("Spotify credentials not configured.")
 
